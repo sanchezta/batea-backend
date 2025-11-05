@@ -18,13 +18,15 @@ type MinerService interface {
 		req *models.CreateMinerRequest,
 		files map[string]*multipart.FileHeader,
 	) (*models.Miner, error)
-	// Podríamos agregar: GetMinerByID(), ValidateMinerData(), etc.
+
+	// 🔥 Nuevo método: paginación de mineros
+	GetAllMiners(page, limit int) (*utils.Pagination, error)
 }
 
 // minerService implementa MinerService.
 type minerService struct {
 	repo repository.MinerRepository
-	cfg *config.Config
+	cfg  *config.Config
 }
 
 // NewMinerService crea una nueva instancia del servicio.
@@ -32,19 +34,19 @@ func NewMinerService(repo repository.MinerRepository, cfg *config.Config) MinerS
 	return &minerService{repo: repo, cfg: cfg}
 }
 
-// CreateMiner maneja toda la lógica para registrar un nuevo minero, incluyendo la validación y el almacenamiento de archivos.
+// CreateMiner maneja toda la lógica para registrar un nuevo minero,
+// incluyendo la validación y el almacenamiento de archivos.
 func (s *minerService) CreateMiner(
 	req *models.CreateMinerRequest,
 	files map[string]*multipart.FileHeader,
 ) (*models.Miner, error) {
-	
-	// 1. Validar los archivos antes de la persistencia
-	validationError := s.validateMinerFiles(req.MinerType, files)
-	if validationError != nil {
-		return nil, validationError
+
+	// 1️⃣ Validar archivos antes de la persistencia
+	if err := s.validateMinerFiles(req.MinerType, files); err != nil {
+		return nil, err
 	}
 
-	// 2. Crear el objeto Miner e inicializarlo con los datos de la solicitud
+	// 2️⃣ Crear el objeto Miner
 	miner := &models.Miner{
 		FullName:    req.FullName,
 		LastName:    req.LastName,
@@ -54,26 +56,23 @@ func (s *minerService) CreateMiner(
 		MinerType:   req.MinerType,
 	}
 
-	// 3. Procesar y guardar archivos
-	// Nota: En un entorno de producción, aquí se subiría a GCP (GCS) y se guardaría la URL pública.
-	// Aquí simulamos guardando localmente y almacenando la ruta local.
-	
-	var filesToSave = map[string]string{
-		"id_photo_front": "", 
-		"id_photo_back": "", 
-		"facial_photo": "",
-		"rucon": "", 
-		"other_doc": "",
+	// 3️⃣ Procesar y guardar archivos
+	filesToSave := map[string]string{
+		"id_photo_front":        "",
+		"id_photo_back":         "",
+		"facial_photo":          "",
+		"rucon":                 "",
+		"other_doc":             "",
 		"exploitation_contract": "",
-		"environmental_tool": "",
-		"technical_tool": "",
+		"environmental_tool":    "",
+		"technical_tool":        "",
 	}
-	
+
 	// Archivos comunes
 	commonFiles := map[string]string{
-		"id_photo_front": "cedulas", 
-		"id_photo_back": "cedulas", 
-		"facial_photo": "facial",
+		"id_photo_front": "cedulas",
+		"id_photo_back":  "cedulas",
+		"facial_photo":   "facial",
 	}
 
 	for field, subdir := range commonFiles {
@@ -86,7 +85,7 @@ func (s *minerService) CreateMiner(
 		}
 	}
 
-	// Archivos específicos según el tipo de minero
+	// Archivos específicos por tipo de minero
 	switch req.MinerType {
 	case models.SubsistenceMiner:
 		if file, ok := files["rucon"]; ok {
@@ -96,7 +95,7 @@ func (s *minerService) CreateMiner(
 			}
 			filesToSave["rucon"] = path
 		}
-		if file, ok := files["other_doc"]; ok { // Opcional
+		if file, ok := files["other_doc"]; ok {
 			path, err := utils.SaveFile(s.cfg, file, "subsistencia/otros")
 			if err != nil {
 				return nil, fmt.Errorf("fallo al guardar otro documento: %w", err)
@@ -107,8 +106,8 @@ func (s *minerService) CreateMiner(
 	case models.TitularMiner:
 		specificFiles := map[string]string{
 			"exploitation_contract": "titular/contrato",
-			"environmental_tool": "titular/ambiental",
-			"technical_tool": "titular/tecnica",
+			"environmental_tool":    "titular/ambiental",
+			"technical_tool":        "titular/tecnica",
 		}
 		for field, subdir := range specificFiles {
 			if file, ok := files[field]; ok {
@@ -120,8 +119,8 @@ func (s *minerService) CreateMiner(
 			}
 		}
 	}
-	
-	// 4. Asignar rutas al modelo (Clean Architecture: Mapeo DTO a Entidad)
+
+	// 4️⃣ Asignar rutas al modelo
 	miner.IDPhotoFrontPath = filesToSave["id_photo_front"]
 	miner.IDPhotoBackPath = filesToSave["id_photo_back"]
 	miner.FacialPhotoPath = filesToSave["facial_photo"]
@@ -131,10 +130,9 @@ func (s *minerService) CreateMiner(
 	miner.EnvironmentalToolPath = filesToSave["environmental_tool"]
 	miner.TechnicalToolPath = filesToSave["technical_tool"]
 
-	// 5. Persistencia en base de datos
+	// 5️⃣ Guardar en la base de datos
 	if err := s.repo.Create(miner); err != nil {
-		// En caso de error de DB, se podría agregar lógica para limpiar archivos subidos
-		log.Printf("Error de DB. Limpieza de archivos omitida por simplicidad: %v", err)
+		log.Printf("Error de DB. Limpieza de archivos omitida: %v", err)
 		if strings.Contains(err.Error(), "unique_violation") {
 			return nil, fmt.Errorf("ya existe un minero registrado con esta cédula o correo electrónico")
 		}
@@ -144,56 +142,59 @@ func (s *minerService) CreateMiner(
 	return miner, nil
 }
 
-// validateMinerFiles valida la presencia, tamaño y tipo de archivos según el MinerType.
+// 🔥 Nuevo método para obtener mineros paginados
+func (s *minerService) GetAllMiners(page, limit int) (*utils.Pagination, error) {
+	return s.repo.FindAllPaginated(page, limit)
+}
+
+// validateMinerFiles valida la presencia, tamaño y tipo de archivos según el tipo de minero.
 func (s *minerService) validateMinerFiles(minerType models.MinerType, files map[string]*multipart.FileHeader) error {
-	
-	// Documentos comunes (Requeridos)
+	// Documentos comunes (requeridos)
 	baseFields := map[string]models.DocumentField{
 		"id_photo_front": {
-			FileHeader: files["id_photo_front"],
-			Required: true,
-			MaxSizeBytes: models.PhotoMaxSize,
+			FileHeader:       files["id_photo_front"],
+			Required:         true,
+			MaxSizeBytes:     models.PhotoMaxSize,
 			AllowedMimeTypes: []string{"image/jpeg", "image/png"},
 		},
 		"id_photo_back": {
-			FileHeader: files["id_photo_back"],
-			Required: true,
-			MaxSizeBytes: models.PhotoMaxSize,
+			FileHeader:       files["id_photo_back"],
+			Required:         true,
+			MaxSizeBytes:     models.PhotoMaxSize,
 			AllowedMimeTypes: []string{"image/jpeg", "image/png"},
 		},
 		"facial_photo": {
-			FileHeader: files["facial_photo"],
-			Required: true,
-			MaxSizeBytes: models.PhotoMaxSize,
+			FileHeader:       files["facial_photo"],
+			Required:         true,
+			MaxSizeBytes:     models.PhotoMaxSize,
 			AllowedMimeTypes: []string{"image/jpeg", "image/png"},
 		},
 	}
-	
-	// Validar campos comunes
+
+	// Validar los campos comunes
 	for fieldName, field := range baseFields {
 		if err := utils.ValidateFile(field); err != nil {
 			return fmt.Errorf("error de validación en el archivo '%s': %w", fieldName, err)
 		}
 	}
 
-	// Documentos específicos
-	var specificFields map[string]models.DocumentField
-	
+	// Campos específicos (PDFs)
 	pdfMimes := []string{"application/pdf", "pdf"}
+	var specificFields map[string]models.DocumentField
 
 	switch minerType {
 	case models.SubsistenceMiner:
 		specificFields = map[string]models.DocumentField{
 			"rucon": {
-				FileHeader: files["rucon"],
-				Required: true,
-				MaxSizeBytes: models.RuconMaxSize,
+				FileHeader:       files["rucon"],
+				Required:         true,
+				MaxSizeBytes:     models.RuconMaxSize,
 				AllowedMimeTypes: pdfMimes,
 			},
-			"other_doc": { // Opcional
-				FileHeader: files["other_doc"],
-				Required: false, 
-				MaxSizeBytes: models.SubsistenceOtherMaxSize,
+			"other_doc": {
+				FileHeader:       files["other_doc"],
+				Required:         false,
+				MaxSizeBytes:     models.SubsistenceOtherMaxSize,
 				AllowedMimeTypes: pdfMimes,
 			},
 		}
@@ -201,29 +202,30 @@ func (s *minerService) validateMinerFiles(minerType models.MinerType, files map[
 	case models.TitularMiner:
 		specificFields = map[string]models.DocumentField{
 			"exploitation_contract": {
-				FileHeader: files["exploitation_contract"],
-				Required: true,
-				MaxSizeBytes: models.ExploitationContractMaxSize,
+				FileHeader:       files["exploitation_contract"],
+				Required:         true,
+				MaxSizeBytes:     models.ExploitationContractMaxSize,
 				AllowedMimeTypes: pdfMimes,
 			},
 			"environmental_tool": {
-				FileHeader: files["environmental_tool"],
-				Required: true,
-				MaxSizeBytes: models.EnvironmentalToolMaxSize,
+				FileHeader:       files["environmental_tool"],
+				Required:         true,
+				MaxSizeBytes:     models.EnvironmentalToolMaxSize,
 				AllowedMimeTypes: pdfMimes,
 			},
 			"technical_tool": {
-				FileHeader: files["technical_tool"],
-				Required: true,
-				MaxSizeBytes: models.TechnicalToolMaxSize,
+				FileHeader:       files["technical_tool"],
+				Required:         true,
+				MaxSizeBytes:     models.TechnicalToolMaxSize,
 				AllowedMimeTypes: pdfMimes,
 			},
 		}
+
 	default:
 		return fmt.Errorf("tipo de minero no válido")
 	}
 
-	// Validar campos específicos
+	// Validar archivos específicos
 	for fieldName, field := range specificFields {
 		if err := utils.ValidateFile(field); err != nil {
 			return fmt.Errorf("error de validación en el archivo específico '%s': %w", fieldName, err)

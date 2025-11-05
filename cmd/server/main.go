@@ -40,6 +40,9 @@ func main() {
 		
 		// Endpoint para obtener un minero por ID
 		v1.GET("/miners/:id", minerController.GetMinerByID)
+
+		// Endpoint para obtener mineros paginados
+		v1.GET("/miners", minerController.GetAllMiners)
 	}
 
 	// 6. Manejar el cierre elegante

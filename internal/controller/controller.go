@@ -90,3 +90,22 @@ func (c *MinerController) GetMinerByID(ctx *gin.Context) {
 		"message": "Funcionalidad pendiente: obtener minero por ID " + idStr,
 	})
 }
+
+
+// GetAllMiners maneja la solicitud GET para listar mineros con paginación.
+// GET /api/v1/miners?page=1&limit=10
+func (c *MinerController) GetAllMiners(ctx *gin.Context) {
+	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(ctx.DefaultQuery("limit", "10"))
+
+	// Llamamos al servicio para obtener la lista paginada
+	result, err := c.minerService.GetAllMiners(page, limit)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, result)
+}

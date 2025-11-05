@@ -2,6 +2,7 @@ package repository
 
 import (
 	"github.com/batea-fintech/batea-ms-backend/internal/models"
+	"github.com/batea-fintech/batea-ms-backend/internal/utils"
 	"gorm.io/gorm"
 )
 
@@ -10,6 +11,8 @@ type MinerRepository interface {
 	Create(miner *models.Miner) error
 	FindByID(id uint) (*models.Miner, error)
 	// Podríamos agregar: FindAll(), Update(), Delete()
+
+	FindAllPaginated(page, limit int) (*utils.Pagination, error)
 }
 
 // minerRepository implementa MinerRepository.
@@ -36,3 +39,8 @@ func (r *minerRepository) FindByID(id uint) (*models.Miner, error) {
 	return &miner, nil
 }
 
+// FindAllPaginated obtiene los mineros de forma paginada.
+func (r *minerRepository) FindAllPaginated(page, limit int) (*utils.Pagination, error) {
+	var miners []models.Miner
+	return utils.Paginate(r.db, &models.Miner{}, page, limit, &miners)
+}

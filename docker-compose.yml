@@ -1,0 +1,39 @@
+version: '3.9'
+
+services:
+  # 🟢 Servicio del backend Go
+  app:
+    container_name: batea-backend
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: air
+    working_dir: /app
+    volumes:
+      - .:/app
+      - air_tmp:/app/tmp
+    ports:
+      - '8080:8080'
+    env_file:
+      - .env
+    depends_on:
+      - db
+    restart: always
+
+  # 🟣 Servicio de PostgreSQL
+  db:
+    image: postgres:14-alpine
+    container_name: batea-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sanchez1105
+      POSTGRES_DB: batea
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  air_tmp:

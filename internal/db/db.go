@@ -35,7 +35,7 @@ func InitPostgres(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("fallo fatal al conectar con la base de datos: %w", err)
 	}
 
-	// 🟢 Paso nuevo: crear tipo ENUM miner_type si no existe
+	// crear tipo ENUM miner_type si no existe
 	createMinerTypeEnum(db)
 
 	// Migrar modelos
@@ -47,7 +47,7 @@ func InitPostgres(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// 🧩 Función auxiliar para crear el tipo ENUM si no existe
+// Función auxiliar para crear el tipo ENUM si no existe
 func createMinerTypeEnum(db *gorm.DB) {
 	sql := `
 	DO $$

@@ -2,7 +2,9 @@ package models
 
 import (
 	"mime/multipart"
+	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -16,30 +18,31 @@ const (
 
 // Miner representa la entidad del minero en la base de datos.
 type Miner struct {
-	gorm.Model
-	
-	// 2) Campos comunes
-	FullName     string    `gorm:"not null" json:"full_name"`
-	LastName     string    `gorm:"not null" json:"last_name"`
-	IDNumber     string    `gorm:"unique;not null" json:"id_number"` // Número de cédula
-	PhoneNumber  string    `json:"phone_number"`
-	Email        string    `gorm:"unique;not null" json:"email"`
-	MinerType    MinerType `gorm:"type:miner_type;not null" json:"miner_type"` // Tipo de minero
-	
-	// Rutas a los archivos guardados (simulando almacenamiento en GCP/Local)
+	ID uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
+	gorm.Model   `gorm:"-"` // Deshabilitamos el ID automático de gorm.Model para usar UUID
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
+
+	// Campos comunes
+	FullName    string    `gorm:"not null" json:"full_name"`
+	LastName    string    `gorm:"not null" json:"last_name"`
+	IDNumber    string    `gorm:"unique;not null" json:"id_number"`
+	PhoneNumber string    `json:"phone_number"`
+	Email       string    `gorm:"unique;not null" json:"email"`
+	MinerType   MinerType `gorm:"type:miner_type;not null" json:"miner_type"`
+
+	// Archivos
 	IDPhotoFrontPath string `json:"id_photo_front_path"`
 	IDPhotoBackPath  string `json:"id_photo_back_path"`
 	FacialPhotoPath  string `json:"facial_photo_path"`
-	
-	// 3) Campos específicos (se guardan como rutas de archivo)
-	// Minero de subsistencia 
-	RuconPath       string `json:"rucon_path,omitempty"` // Requerido
-	OtherDocPath    string `json:"other_doc_path,omitempty"` // Opcional
 
-	// Minero titular 
-	ExploitationContractPath string `json:"exploitation_contract_path,omitempty"` // Contrato o permiso
-	EnvironmentalToolPath    string `json:"environmental_tool_path,omitempty"`    // Herramienta ambiental (licencia)
-	TechnicalToolPath        string `json:"technical_tool_path,omitempty"`        // Herramienta técnica (PTO)
+	// Documentos específicos
+	RuconPath       string `json:"rucon_path,omitempty"`
+	OtherDocPath    string `json:"other_doc_path,omitempty"`
+	ExploitationContractPath string `json:"exploitation_contract_path,omitempty"`
+	EnvironmentalToolPath    string `json:"environmental_tool_path,omitempty"`
+	TechnicalToolPath        string `json:"technical_tool_path,omitempty"`
 }
 
 // CreateMinerRequest es el DTO para recibir datos de entrada del formulario.

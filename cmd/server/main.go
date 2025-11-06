@@ -43,6 +43,9 @@ func main() {
 
 		// Endpoint para obtener mineros paginados
 		v1.GET("/miners", minerController.GetAllMiners)
+		
+		// Endpoint opcional para obtener el código TOTP actual
+		v1.GET("/miners/:id/totp", minerController.GetCurrentTOTP)
 	}
 
 	// 6. Manejar el cierre elegante

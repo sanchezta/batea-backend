@@ -38,3 +38,5 @@ postgres-data/
 # 💻 OS generated files
 .DS_Store
 Thumbs.db
+credentials.json
+credentials.json

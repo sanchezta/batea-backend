@@ -44,7 +44,7 @@ func LoadConfig() *Config {
 		GoogleCredentialsPath: getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
 	}
 
-	// 🧱 Crear el directorio local solo si se usa almacenamiento local
+	// Crear el directorio local solo si se usa almacenamiento local
 	if cfg.UploadDir != "" {
 		if _, err := os.Stat(cfg.UploadDir); os.IsNotExist(err) {
 			log.Printf("Creando directorio local de carga: %s\n", cfg.UploadDir)

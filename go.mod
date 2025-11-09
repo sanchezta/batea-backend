@@ -1,4 +1,4 @@
-module github.com/batea-fintech/batea-ms-backend
+module github.com/sanchezta/batea-backend
 
 go 1.25.1
 

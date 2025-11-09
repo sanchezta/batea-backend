@@ -3,22 +3,22 @@ package repository
 import (
 	"errors"
 
-	"github.com/batea-fintech/batea-ms-backend/internal/models"
-	"github.com/batea-fintech/batea-ms-backend/internal/utils"
-
 	"github.com/google/uuid"
+	"github.com/sanchezta/batea-backend/internal/models"
+	"github.com/sanchezta/batea-backend/internal/utils"
 	"gorm.io/gorm"
 )
 
-// MinerRepository define las operaciones con la base de datos de mineros
+var ErrMinerNotFound = errors.New("minero no encontrado")
+
 type MinerRepository interface {
 	Create(miner *models.Miner) error
 	FindByEmail(email string) (*models.Miner, error)
 	FindByID(id uuid.UUID) (*models.Miner, error)
+	FindByUserID(userID uuid.UUID) (*models.Miner, error)
+	FindByFirebaseUID(uid string) (*models.Miner, error)
 	Update(miner *models.Miner) error
 	Delete(id uuid.UUID) error
-
-	// Método para listar con paginación
 	FindAllPaginated(page, limit int) (*utils.Pagination, error)
 }
 
@@ -30,43 +30,61 @@ func NewMinerRepository(db *gorm.DB) MinerRepository {
 	return &minerRepository{db}
 }
 
-// Create crea un nuevo registro de minero
 func (r *minerRepository) Create(miner *models.Miner) error {
 	return r.db.Create(miner).Error
 }
 
-// FindByEmail busca un minero por email
 func (r *minerRepository) FindByEmail(email string) (*models.Miner, error) {
 	var miner models.Miner
-	err := r.db.Where("email = ?", email).First(&miner).Error
-	if err != nil {
+	if err := r.db.Where("email = ?", email).First(&miner).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrMinerNotFound
 		}
 		return nil, err
 	}
 	return &miner, nil
 }
 
-// FindByID busca un minero por su ID
 func (r *minerRepository) FindByID(id uuid.UUID) (*models.Miner, error) {
 	var miner models.Miner
-	err := r.db.First(&miner, "id = ?", id).Error
-	if err != nil {
+	if err := r.db.First(&miner, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
+			return nil, ErrMinerNotFound
 		}
 		return nil, err
 	}
 	return &miner, nil
 }
 
-// Update actualiza los datos del minero
+func (r *minerRepository) FindByUserID(userID uuid.UUID) (*models.Miner, error) {
+	var miner models.Miner
+	if err := r.db.Where("user_id = ?", userID).First(&miner).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMinerNotFound
+		}
+		return nil, err
+	}
+	return &miner, nil
+}
+
+func (r *minerRepository) FindByFirebaseUID(uid string) (*models.Miner, error) {
+	var miner models.Miner
+	err := r.db.Joins("JOIN users ON users.id = miners.user_id").
+		Where("users.firebase_uid = ?", uid).
+		First(&miner).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrMinerNotFound
+		}
+		return nil, err
+	}
+	return &miner, nil
+}
+
 func (r *minerRepository) Update(miner *models.Miner) error {
 	return r.db.Save(miner).Error
 }
 
-// Delete elimina un minero (soft delete)
 func (r *minerRepository) Delete(id uuid.UUID) error {
 	return r.db.Delete(&models.Miner{}, id).Error
 }

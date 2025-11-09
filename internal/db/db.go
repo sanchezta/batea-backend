@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/batea-fintech/batea-ms-backend/internal/config"
-	"github.com/batea-fintech/batea-ms-backend/internal/models"
+	"github.com/sanchezta/batea-backend/internal/config"
+	"github.com/sanchezta/batea-backend/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -35,11 +35,14 @@ func InitPostgres(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("fallo fatal al conectar con la base de datos: %w", err)
 	}
 
-	// crear tipo ENUM miner_type si no existe
+	// Crear tipo ENUM miner_type si no existe
 	createMinerTypeEnum(db)
 
-	// Migrar modelos
-	if err := db.AutoMigrate(&models.Miner{}); err != nil {
+	// Migrar modelos de User y Miner
+	if err := db.AutoMigrate(
+		&models.User{},
+		&models.Miner{},
+	); err != nil {
 		return nil, fmt.Errorf("fallo en la migración de la base de datos: %w", err)
 	}
 
@@ -47,7 +50,7 @@ func InitPostgres(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-// Función auxiliar para crear el tipo ENUM si no existe
+// Crear tipo ENUM miner_type si no existe
 func createMinerTypeEnum(db *gorm.DB) {
 	sql := `
 	DO $$

@@ -19,16 +19,16 @@ const (
 // Miner representa la entidad del minero en la base de datos.
 type Miner struct {
 	ID uuid.UUID `gorm:"type:uuid;default:uuid_generate_v4();primaryKey" json:"id"`
-	gorm.Model   `gorm:"-"` // Deshabilitamos el ID automático de gorm.Model para usar UUID
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `gorm:"index" json:"deleted_at"`
 
+	// Relación con User 
+	UserID uuid.UUID `gorm:"type:uuid;not null;unique" json:"user_id"`
+
 	// Campos comunes
 	FullName    string    `gorm:"not null" json:"full_name"`
 	LastName    string    `gorm:"not null" json:"last_name"`
-	IDNumber    string    `gorm:"unique;not null" json:"id_number"`
-	PhoneNumber string    `json:"phone_number"`
 	Email       string    `gorm:"unique;not null" json:"email"`
 	MinerType   MinerType `gorm:"type:miner_type;not null" json:"miner_type"`
 
@@ -52,7 +52,6 @@ type Miner struct {
 type CreateMinerRequest struct {
 	FullName     string    `form:"full_name" binding:"required"`
 	LastName     string    `form:"last_name" binding:"required"`
-	IDNumber     string    `form:"id_number" binding:"required"`
 	PhoneNumber  string    `form:"phone_number"`
 	Email        string    `form:"email" binding:"required,email"`
 	MinerType    MinerType `form:"miner_type" binding:"required,oneof=titular subsistencia"`

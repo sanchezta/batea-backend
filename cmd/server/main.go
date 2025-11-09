@@ -6,12 +6,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/batea-fintech/batea-ms-backend/internal/config"
-	"github.com/batea-fintech/batea-ms-backend/internal/controller"
-	"github.com/batea-fintech/batea-ms-backend/internal/db"
-	"github.com/batea-fintech/batea-ms-backend/internal/repository"
-	"github.com/batea-fintech/batea-ms-backend/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/sanchezta/batea-backend/internal/config"
+	"github.com/sanchezta/batea-backend/internal/controller"
+	"github.com/sanchezta/batea-backend/internal/db"
+	"github.com/sanchezta/batea-backend/internal/repository"
+	"github.com/sanchezta/batea-backend/internal/service"
 )
 
 func main() {
@@ -23,32 +23,34 @@ func main() {
 	if err != nil {
 		log.Fatalf("No se pudo inicializar la base de datos: %v", err)
 	}
-	
-	// 3. Inyección de Dependencias (Arquitectura Limpia/Service-Repository)
+
+	// 3. Inyección de dependencias (Arquitectura limpia)
+	userRepo := repository.NewUserRepository(gormDB)
 	minerRepo := repository.NewMinerRepository(gormDB)
-	minerService := service.NewMinerService(minerRepo, cfg)
+
+	userService := service.NewUserService(userRepo)
+	minerService := service.NewMinerService(minerRepo, userRepo, cfg)
+
+	userController := controller.NewUserController(userService, minerService)
 	minerController := controller.NewMinerController(minerService)
 
-	// 4. Configurar Gin
+	// 4. Configurar router de Gin
 	router := gin.Default()
 
-	// 5. Definir Rutas (Endpoints RESTful)
+	// 5. Definir rutas RESTful
 	v1 := router.Group("/api/v1")
 	{
-		// Endpoint para registrar un nuevo minero (POST multipart/form-data)
-		v1.POST("/miners", minerController.RegisterMiner)
-		
-		// Endpoint para obtener un minero por ID
-		v1.GET("/miners/:id", minerController.GetMinerByID)
+		// Registro de usuario
+		v1.POST("/users/register", userController.RegisterUser)
 
-		// Endpoint para obtener mineros paginados
+		// Rutas de mineros
+		v1.POST("/miners", minerController.RegisterMiner)
+		v1.GET("/miners/:id", minerController.GetMinerByID)
 		v1.GET("/miners", minerController.GetAllMiners)
-		
-		// Endpoint opcional para obtener el código TOTP actual
 		v1.GET("/miners/:id/totp", minerController.GetCurrentTOTP)
 	}
 
-	// 6. Manejar el cierre elegante
+	// 6. Manejar cierre elegante
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -59,9 +61,7 @@ func main() {
 	}()
 	log.Printf("Servidor Go/Gin corriendo en el puerto %s...", cfg.Port)
 
-	// Esperar señal de cierre
 	<-quit
 	log.Println("Apagando el servidor...")
-	// Aquí se podría agregar lógica de limpieza de DB o recursos
 	log.Println("Servidor apagado.")
 }

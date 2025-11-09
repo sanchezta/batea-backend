@@ -8,18 +8,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/batea-fintech/batea-ms-backend/internal/config"
-	"github.com/batea-fintech/batea-ms-backend/internal/models"
-	"github.com/batea-fintech/batea-ms-backend/internal/repository"
-	"github.com/batea-fintech/batea-ms-backend/internal/utils"
 	"github.com/google/uuid"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
+
+	"github.com/sanchezta/batea-backend/internal/config"
+	"github.com/sanchezta/batea-backend/internal/models"
+	"github.com/sanchezta/batea-backend/internal/repository"
+	"github.com/sanchezta/batea-backend/internal/utils"
 )
 
 // MinerService define la interfaz para la lógica de negocio de Mineros.
+// 👇 Recibe userID como primer parámetro (NO usamos req.UserID)
 type MinerService interface {
 	CreateMiner(
+		userID uuid.UUID,
 		req *models.CreateMinerRequest,
 		files map[string]*multipart.FileHeader,
 	) (*models.Miner, string, string, error)
@@ -30,37 +33,60 @@ type MinerService interface {
 }
 
 type minerService struct {
-	repo repository.MinerRepository
-	cfg  *config.Config
+	repo     repository.MinerRepository
+	userRepo repository.UserRepository // para verificar existencia del usuario
+	cfg      *config.Config
 }
 
-// NewMinerService crea una nueva instancia del servicio.
-func NewMinerService(repo repository.MinerRepository, cfg *config.Config) MinerService {
-	return &minerService{repo: repo, cfg: cfg}
+// NewMinerService crea una nueva instancia del servicio de mineros.
+// Si no quieres validar usuario, puedes pasar nil en userRepo y saltar esa verificación.
+func NewMinerService(repo repository.MinerRepository, userRepo repository.UserRepository, cfg *config.Config) MinerService {
+	return &minerService{
+		repo:     repo,
+		userRepo: userRepo,
+		cfg:      cfg,
+	}
 }
 
-// ✅ CreateMiner maneja toda la lógica para registrar un nuevo minero.
+// CreateMiner: ahora recibe userID (no depende de req.UserID).
 func (s *minerService) CreateMiner(
+	userID uuid.UUID,
 	req *models.CreateMinerRequest,
 	files map[string]*multipart.FileHeader,
 ) (*models.Miner, string, string, error) {
 
-	// Validar archivos antes de la persistencia
+	// Validar userID
+	if userID == uuid.Nil {
+		return nil, "", "", errors.New("falta el ID del usuario asociado al minero")
+	}
+
+	// (Opcional) Verificar que el usuario exista si userRepo no es nil
+	if s.userRepo != nil {
+		user, err := s.userRepo.FindByID(userID.String())
+		if err != nil {
+			return nil, "", "", fmt.Errorf("error al buscar usuario asociado: %w", err)
+		}
+		if user == nil {
+			return nil, "", "", errors.New("el usuario asociado no existe o fue eliminado")
+		}
+	}
+
+	// Validar archivos antes de persistencia
 	if err := s.validateMinerFiles(req.MinerType, files); err != nil {
 		return nil, "", "", err
 	}
 
-	// Crear el objeto Miner
+	// Crear el objeto Miner vinculado al usuario
 	miner := &models.Miner{
+		UserID:      userID, // vínculo real con User
 		FullName:    req.FullName,
 		LastName:    req.LastName,
-		IDNumber:    req.IDNumber,
-		PhoneNumber: req.PhoneNumber,
+		// PhoneNumber: req.PhoneNumber,
 		Email:       req.Email,
 		MinerType:   req.MinerType,
 	}
 
-	// Procesar y guardar archivos
+	// Map de rutas a guardar
 	filesToSave := map[string]string{
 		"id_photo_front":        "",
 		"id_photo_back":         "",
@@ -72,22 +98,23 @@ func (s *minerService) CreateMiner(
 		"technical_tool":        "",
 	}
 
+	// Comunes
 	commonFiles := map[string]string{
 		"id_photo_front": "cedulas",
 		"id_photo_back":  "cedulas",
 		"facial_photo":   "facial",
 	}
-
 	for field, subdir := range commonFiles {
 		if file, ok := files[field]; ok {
 			path, err := utils.SaveFile(s.cfg, file, subdir)
 			if err != nil {
-				return nil, "", "", fmt.Errorf("fallo al guardar archivo común %s: %w", field, err)
+				return nil, "", "", fmt.Errorf("fallo al guardar archivo %s: %w", field, err)
 			}
 			filesToSave[field] = path
 		}
 	}
 
+	// Específicos por tipo
 	switch req.MinerType {
 	case models.SubsistenceMiner:
 		if file, ok := files["rucon"]; ok {
@@ -97,20 +124,21 @@ func (s *minerService) CreateMiner(
 			}
 			filesToSave["rucon"] = path
 		}
-		if file, ok := files["other_doc"]; ok {
-			path, err := utils.SaveFile(s.cfg, file, "subsistencia/otros")
-			if err != nil {
-				return nil, "", "", fmt.Errorf("fallo al guardar otro documento: %w", err)
-			}
-			filesToSave["other_doc"] = path
-		}
+		
+		if file, ok := files["other_doc"]; ok && file != nil {
+    path, err := utils.SaveFile(s.cfg, file, "subsistencia/otros")
+    if err != nil {
+        return nil, "", "", fmt.Errorf("fallo al guardar otro documento: %w", err)
+    }
+    filesToSave["other_doc"] = path
+}
 	case models.TitularMiner:
-		specificFiles := map[string]string{
+		spec := map[string]string{
 			"exploitation_contract": "titular/contrato",
 			"environmental_tool":    "titular/ambiental",
 			"technical_tool":        "titular/tecnica",
 		}
-		for field, subdir := range specificFiles {
+		for field, subdir := range spec {
 			if file, ok := files[field]; ok {
 				path, err := utils.SaveFile(s.cfg, file, subdir)
 				if err != nil {
@@ -119,6 +147,8 @@ func (s *minerService) CreateMiner(
 				filesToSave[field] = path
 			}
 		}
+	default:
+		return nil, "", "", fmt.Errorf("tipo de minero '%s' no reconocido", req.MinerType)
 	}
 
 	// Asignar rutas
@@ -131,7 +161,7 @@ func (s *minerService) CreateMiner(
 	miner.EnvironmentalToolPath = filesToSave["environmental_tool"]
 	miner.TechnicalToolPath = filesToSave["technical_tool"]
 
-	// ✅ Generar y asignar el secreto TOTP (6 dígitos, 30s)
+	// TOTP
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      "Batea Fintech",
 		AccountName: req.Email,
@@ -144,7 +174,6 @@ func (s *minerService) CreateMiner(
 	miner.TOTPSecret = key.Secret()
 	qrURL := key.URL()
 
-	// ✅ Generar el código actual de 6 dígitos basado en ese secreto
 	code, err := totp.GenerateCodeCustom(miner.TOTPSecret, time.Now(), totp.ValidateOpts{
 		Period:    30,
 		Digits:    otp.DigitsSix,
@@ -154,7 +183,7 @@ func (s *minerService) CreateMiner(
 		return nil, "", "", fmt.Errorf("error generando código TOTP: %w", err)
 	}
 
-	// Guardar en la base de datos
+	// Persistir
 	if err := s.repo.Create(miner); err != nil {
 		log.Printf("Error de DB. Limpieza de archivos omitida: %v", err)
 		if strings.Contains(err.Error(), "unique_violation") {
@@ -163,7 +192,6 @@ func (s *minerService) CreateMiner(
 		return nil, "", "", fmt.Errorf("fallo al guardar el minero en la base de datos: %w", err)
 	}
 
-	// ✅ Devuelve el minero, el código numérico (6 dígitos) y el QR URL
 	return miner, code, qrURL, nil
 }
 
@@ -254,7 +282,7 @@ func (s *minerService) validateMinerFiles(minerType models.MinerType, files map[
 	return nil
 }
 
-// ✅ Generar código TOTP de 6 dígitos (cada 30 s)
+// Generar TOTP
 func (s *minerService) GenerateTOTP(minerID uuid.UUID) (string, error) {
 	miner, err := s.repo.FindByID(minerID)
 	if err != nil {
@@ -275,7 +303,7 @@ func (s *minerService) GenerateTOTP(minerID uuid.UUID) (string, error) {
 	return code, nil
 }
 
-// ✅ Validar código TOTP ingresado
+// Validar TOTP
 func (s *minerService) ValidateTOTP(minerID uuid.UUID, code string) (bool, error) {
 	miner, err := s.repo.FindByID(minerID)
 	if err != nil {

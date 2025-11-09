@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/batea-fintech/batea-ms-backend/internal/models"
-	"github.com/batea-fintech/batea-ms-backend/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/sanchezta/batea-backend/internal/models"
+	"github.com/sanchezta/batea-backend/internal/service"
 )
 
 // MinerController define los métodos del controlador HTTP.
@@ -22,10 +22,11 @@ func NewMinerController(s service.MinerService) *MinerController {
 	return &MinerController{minerService: s}
 }
 
-//  RegisterMiner maneja la solicitud POST para registrar un nuevo minero con archivos.
+ 
+// RegisterMiner maneja la solicitud POST para registrar un nuevo minero con archivos.
 // POST /miners (multipart/form-data)
 func (c *MinerController) RegisterMiner(ctx *gin.Context) {
-	// Primero parseamos el formulario
+	// Parsear formulario
 	if err := ctx.Request.ParseMultipartForm(500 * models.Megabyte); err != nil {
 		ctx.JSON(http.StatusRequestEntityTooLarge, gin.H{
 			"error":   "Tamaño del formulario o archivo demasiado grande",
@@ -34,7 +35,15 @@ func (c *MinerController) RegisterMiner(ctx *gin.Context) {
 		return
 	}
 
-	// Hacemos el bind de los campos de texto
+	// Obtener user_id del formulario
+	userIDStr := ctx.PostForm("user_id")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "El user_id proporcionado no es válido"})
+		return
+	}
+
+	// Bind campos del formulario
 	var req models.CreateMinerRequest
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{
@@ -44,7 +53,7 @@ func (c *MinerController) RegisterMiner(ctx *gin.Context) {
 		return
 	}
 
-	// Mapear archivos del formulario
+	// Mapear archivos
 	files := make(map[string]*multipart.FileHeader)
 	files["id_photo_front"], _ = ctx.FormFile("id_photo_front")
 	files["id_photo_back"], _ = ctx.FormFile("id_photo_back")
@@ -55,8 +64,8 @@ func (c *MinerController) RegisterMiner(ctx *gin.Context) {
 	files["environmental_tool"], _ = ctx.FormFile("environmental_tool")
 	files["technical_tool"], _ = ctx.FormFile("technical_tool")
 
-	// Llamar al servicio de negocio
-	miner, code, qrURL, err := c.minerService.CreateMiner(&req, files)
+	// Llamar al servicio (pasando userID)
+	miner, code, qrURL, err := c.minerService.CreateMiner(userID, &req, files)
 	if err != nil {
 		log.Printf("Error al crear minero: %v", err)
 		ctx.JSON(http.StatusInternalServerError, gin.H{
@@ -66,12 +75,12 @@ func (c *MinerController) RegisterMiner(ctx *gin.Context) {
 		return
 	}
 
-	// Respuesta al cliente
+	// Respuesta
 	ctx.JSON(http.StatusCreated, gin.H{
-		"message":      "Minero registrado exitosamente y archivos procesados.",
-		"miner":        miner,
-		"totp_code":    code,   // 🔥 Código numérico de 6 dígitos
-		"qr_code_url":  qrURL,  // 🔗 QR para escanear si lo deseas
+		"message":     "Minero registrado exitosamente.",
+		"miner":       miner,
+		"totp_code":   code,
+		"qr_code_url": qrURL,
 	})
 }
 
@@ -107,7 +116,6 @@ func (c *MinerController) GetAllMiners(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, result)
 }
 
-// Nuevo endpoint opcional:
 // Obtener el código TOTP actual para un minero (para Flutter)
 // GET /miners/:id/totp
 func (c *MinerController) GetCurrentTOTP(ctx *gin.Context) {

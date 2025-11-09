@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/batea-fintech/batea-ms-backend/internal/config"
-	"github.com/batea-fintech/batea-ms-backend/internal/models"
+	"github.com/sanchezta/batea-backend/internal/config"
+	"github.com/sanchezta/batea-backend/internal/models"
 )
 
 // SaveFile guarda un archivo de la solicitud multipart en el disco local (simulación de GCP).
